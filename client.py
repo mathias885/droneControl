@@ -1,26 +1,38 @@
 import tkinter as tk
 from tkinter import ttk
 import socket
-from Message import message
+from Message import Command, Message
 
-HOST = 'localhost'  # Update with your actual server host
-PORT = 3000  # Update with your actual server port
+global HOST
+HOST = '127.0.0.1'
 
-print(message.quit)
+global PORT
+PORT = 3000  
 
+# ------------ MODIFICA QUI PER CAMBIARE TIMEOUT BROADCAST ----------------
+global TIMEOUT
+TIMEOUT = 5
+
+global BROADCAST
+BROADCAST = None
+
+global CLIENT
+CLIENT = None
+
+# -------------- Parte fatta dal nostro amico chat GPT --------------
 class MessageApp:
     def __init__(self, root):
-        self.root = root
+        self.root = root 
         self.root.title("Message Creator")
 
         # Dropdown for message type
         self.msg_type = tk.StringVar()
-        self.msg_type.set("fly_up")  # Default value
+        self.msg_type.set("FLY_UP")
         tk.Label(root, text="Select Message Type:").grid(row=0, column=0)
 
-        # Getting Enum names correctly
+        # Get Enum names for dropdown
         self.dropdown = ttk.Combobox(root, textvariable=self.msg_type)
-        self.dropdown['values'] = [m.name for m in message]  # Ensuring all enum names, including 'quit', are displayed
+        self.dropdown['values'] = [cmd.name for cmd in Command] 
         self.dropdown.grid(row=0, column=1)
         self.dropdown.bind("<<ComboboxSelected>>", self.update_inputs)
 
@@ -41,72 +53,179 @@ class MessageApp:
         self.quit_button = tk.Button(root, text="Send Quit Message", command=self.send_quit_message)
         self.quit_button.grid(row=3, column=2)
 
+        # Button for sending broadcast
+        self.quit_button = tk.Button(root, text="Reconnect", command=self.reconnect)
+        self.quit_button.grid(row=3, column=3)
+
         # Output area
         self.output = tk.Label(root, text="")
         self.output.grid(row=4, column=0, columnspan=3)
 
-        self.update_inputs()  # Initialize the input fields
+        self.update_inputs()  # Initialize input fields
+
+    def reconnect(self, event=None):
+        reconnect()
 
     def update_inputs(self, event=None):
-        """ Update input fields based on message type """
+        """ Update input fields based on selected message type """
         msg_type = self.msg_type.get()
-        
-        if msg_type in ["fly_up", "translate"]:
+
+        if msg_type in ["FLY_UP", "TRANSLATE"]:
             self.input1.grid()
             self.input2.grid_remove()
-        elif msg_type == "land_at":
+        elif msg_type == "LAND_AT":
             self.input1.grid()
             self.input2.grid()
-        elif msg_type == "land":
+        elif msg_type in ["LAND", "QUIT"]:
             self.input1.grid_remove()
-            self.input2.grid_remove()
-        elif msg_type == "quit":
-            self.input1.grid()
             self.input2.grid_remove()
 
     def create_message(self):
-        """ Create the message and display the result """
+        """ Create the message and send it """
         msg_type = self.msg_type.get()
         try:
-            if msg_type in ["fly_up", "translate"]:
+            if msg_type == "FLY_UP":
                 value = int(self.input1.get())
-                message_instance = message[msg_type](value)
-            elif msg_type == "land_at":
+                message_instance = Message.fly_up(value)
+            elif msg_type == "TRANSLATE":
+                value = int(self.input1.get())
+                message_instance = Message.translate(value, value)
+            elif msg_type == "LAND_AT":
                 x = int(self.input1.get())
                 y = int(self.input2.get())
-                message_instance = message[msg_type](x, y)
-            elif msg_type == "land":
-                message_instance = message[msg_type]()
-            elif msg_type == "quit":
-                message_instance = message[msg_type]()
+                message_instance = Message.land_at(x, y)
+            elif msg_type == "LAND":
+                message_instance = Message.land()
+            elif msg_type == "QUIT":
+                message_instance = Message.quit()
             else:
                 raise ValueError("Invalid message type")
 
-            self.output.config(text=f"Message: {message_instance}\nValue: {message_instance.getValue()}")
-            print(message_instance.getJson())
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
-                client.connect((HOST, PORT))
-                data = message_instance.getJson().encode('utf-8')
-                client.sendall(data) 
-                data_rcv = client.recv(1024)
-                print(data_rcv)
-        
+            # Display result
+            self.output.config(text=f"Message: {message_instance}\nJSON: {message_instance.to_json()}")
+
+            # Send message over the open socket
+            data = message_instance.to_json().encode('utf-8')
+            CLIENT.sendall(data)
+
+            # Receive response from the server
+            try:
+                data_rcv = CLIENT.recv(1024)
+                if data_rcv:
+                    print(data_rcv.decode('utf-8'))
+                else:
+                    print("No response from server.")
+            except socket.error as e:
+                print(f"Error receiving data: {e}")
+
         except ValueError as e:
             self.output.config(text=f"Error: {e}")
 
     def send_quit_message(self):
         """ Send a quit message """
-        message_instance = message.quit()
-        self.output.config(text=f"Message: {message_instance}\nValue: {message_instance.getValue()}")
-        print(message_instance.getJson())
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
-            client.connect((HOST, PORT))
-            data = message_instance.getJson().encode('utf-8')
-            client.sendall(data) 
-            data_rcv = client.recv(1024)
-            print(data_rcv)
+        message_instance = Message.quit()
+        self.output.config(text=f"Message: {message_instance}\nJSON: {message_instance.to_json()}")
 
-# Run the application
+        # Send quit message over the open socket
+        data = message_instance.to_json().encode('utf-8')
+        CLIENT.sendall(data)
+
+        # Receive server response
+        try:
+            data_rcv = CLIENT.recv(1024)
+            if data_rcv:
+                shutdown()
+            else:
+                print("No response from server.")
+        except socket.error as e:
+            print(f"Error receiving data: {e}")
+
+# -------------- FINE Parte fatta dal nostro amico chat GPT --------------
+
+#inizializza il broadcast udp per capire quale è il server
+def start_broadcast():
+    global HOST
+    global BROADCAST
+    BROADCAST = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    BROADCAST.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    BROADCAST.sendto("DISCOVERY".encode(), ('<broadcast>', 5000))
+    BROADCAST.settimeout(TIMEOUT) 
+    print(f"broadcasting for server.. timeout in {TIMEOUT} seconds")
+
+    try:
+        data, addr = BROADCAST.recvfrom(1024)
+        if data.decode().startswith("SERVER_IP:"):
+            server_ip = data.decode().split(':')[1]
+            print(f"Server IP found: {server_ip}")
+            HOST = server_ip
+            start_client()
+        else:
+            print("No valid server found.")
+            return
+    except socket.timeout:
+        print("No response from server.")
+        return
+
+# permette di riconnettersi se andato in inactivity timeout
+def reconnect():
+    global CLIENT  # Serve per modificare la variabile globale
+    if CLIENT:
+        print("Connessione già attiva. Chiudo e riapro...")
+        shutdown()  # Chiude prima la connessione esistente nel caso lo si clicki per sbaglio
+    
+    # Richiama start_client per riaprire la connessione
+    start_client()
+    print("Riconnessione completata.")
+
+
+def start_client():
+    global CLIENT
+    # Verifica se CLIENT è già attivo e chiudilo se necessario
+    if CLIENT:
+        print("Connessione già aperta, la chiudo prima di riconnettermi.")
+        try:
+            CLIENT.close()
+        except socket.error as e:
+            print(f"Errore durante la chiusura: {e}")
+        finally:
+            CLIENT = None  # Imposta a None per forzare la ricreazione
+
+    # Ricrea il socket TCP
+    try:
+        CLIENT = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        CLIENT.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Per riutilizzare la porta subito
+        CLIENT.connect((HOST, PORT))
+        print(f"Connesso a {HOST}:{PORT}")
+    except socket.error as e:
+        print(f"Errore durante la connessione: {e}")
+    except Exception as e:
+        print(f"Errore imprevisto: {e}")
+
+def shutdown():
+    global CLIENT
+    if CLIENT:
+        try:
+            CLIENT.close()
+            print("Connessione chiusa.")
+        except socket.error as e:
+            print(f"Errore durante la chiusura della connessione: {e}")
+        finally:
+            CLIENT = None
+    else:
+        print("Nessuna connessione attiva da chiudere.")
+
+
+#fa partire il broadcast e setta client
+start_broadcast()
+
+
+#fa partire l'app grafica
 root = tk.Tk()
 app = MessageApp(root)
 root.mainloop()
+
+
+#chiusura connessioni
+BROADCAST.close()
+CLIENT.close()
+
