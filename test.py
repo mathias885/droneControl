@@ -12,21 +12,21 @@ async def main():
             ["./mavsdk_server_win32.exe", "-p", "50051"],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-        
         # Controllo del server avviato
-        out, err = server_process.communicate(timeout=10)  # Tempo massimo di attesa
-        print(f"Output: {out.decode()}")
-        print(f"Error: {err.decode()}")
-        
+        #out, err = server_process.communicate(timeout=10)  # Tempo massimo di attesa
+        #print(f"Output: {out.decode()}")
+        #print(f"Error: {err.decode()}")
+
         if not is_mavsdk_running():
             print("Errore: il server mavsdk non si è avviato correttamente.")
             return
 
         await asyncio.sleep(2)  # Attendere un momento affinché il server si avvii
-    
+
     # Connessione al drone tramite MAVSDK
-    drone = System(mavsdk_server_address="localhost", port=50051)
-    await drone.connect(system_address="udpin://127.0.0.1:14540")  # Nuovo
+    drone = System(mavsdk_server_address="localhost", port=14540)
+    await drone.connect(system_address="udpin://127.0.0.1:14540")    
+    print("arrivato fino a qui")
 
     print("In attesa del drone...")
     async for state in drone.core.connection_state():
