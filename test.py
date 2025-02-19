@@ -24,9 +24,8 @@ async def main():
         await asyncio.sleep(2)  # Attendere un momento affinché il server si avvii
 
     # Connessione al drone tramite MAVSDK
-    drone = System(mavsdk_server_address="localhost", port=14540)
-    await drone.connect(system_address="udpin://127.0.0.1:14540")    
-    print("arrivato fino a qui")
+    drone = System()
+    await drone.connect(system_address="udpin://127.0.0.1:14550")    
 
     print("In attesa del drone...")
     async for state in drone.core.connection_state():

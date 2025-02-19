@@ -1,26 +1,52 @@
 import json
 import socket
+import asyncio
+import subprocess
+import os
+from mavsdk import System
 from Message import Command, Message
 
 HOST = "127.0.0.1"
 PORT = 3000
 NO_CONNECTION_TIMEOUT = 30 # timeout di mancanza connesione
-INACTIVITY_TIMEOUT = 15  # timeout di inattività del ricevitore
+INACTIVITY_TIMEOUT = 60  # timeout di inattività del ricevitore
+drone = System()
 
 
 # ------------ INSERISCI QUI TUTTI I TUOI INTRIGHI MATHIAS ----------------
+
+
+async def main():
+    # Connessione al drone tramite MAVSDK
+    await drone.connect(system_address="udpin://127.0.0.1:14550") # qui devi mettere l'indirizzo della scheda di volo
+    print("In attesa del drone...")
+    async for state in drone.core.connection_state():
+        if state.is_connected:
+            print("Drone connesso!")
+            break
+
+    return None
+
+
+
+
+
+
 
 def handle_msg(msg: Message):
     print(f"Handling message: {msg}")
     match msg.command:
         case Command.FLY_UP:
+            drone.action.set_takeoff_altitude(msg.values)
+            drone.action.takeoff()
             print(f"Fly Up: {msg.values}")
         case Command.TRANSLATE:
-            print(f"Translate: {msg.values}")
+            print(f"Translate: {msg.values}") #da ripensare, opzioni: 1) goto_location ()coordinate globali | 2)impostare una certa velocità nelle 3 dimensioni, mantenendola per x secondi
         case Command.LAND_AT:
             print(f"Land At: {msg.values}")
         case Command.LAND:
             print("Land")
+            drone.action.land()
         case Command.QUIT:
             # qui lasciami il return false che serve per poter uscire dal ciclo di ascolto
             print("Quit command received. Shutting down.")
