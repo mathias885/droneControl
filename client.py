@@ -39,27 +39,33 @@ class MessageApp:
         # Input fields
         self.input1 = tk.Entry(root)
         self.input2 = tk.Entry(root)
+        self.input3 = tk.Entry(root)
+        self.input4 = tk.Entry(root)
         self.input1.grid(row=1, column=1)
         self.input2.grid(row=2, column=1)
+        self.input3.grid(row=3, column=1)
+        self.input4.grid(row=4, column=1)
         
         tk.Label(root, text="Input 1:").grid(row=1, column=0)
         tk.Label(root, text="Input 2:").grid(row=2, column=0)
+        tk.Label(root, text="Input 3:").grid(row=3, column=0)
+        tk.Label(root, text="Input 4:").grid(row=4, column=0)
         
         # Button to create message
         self.create_button = tk.Button(root, text="Create Message", command=self.create_message)
-        self.create_button.grid(row=3, column=0, columnspan=2)
+        self.create_button.grid(row=5, column=0, columnspan=2)
 
         # Button to send "quit" message
         self.quit_button = tk.Button(root, text="Send Quit Message", command=self.send_quit_message)
-        self.quit_button.grid(row=3, column=2)
+        self.quit_button.grid(row=5, column=2)
 
         # Button for sending broadcast
-        self.quit_button = tk.Button(root, text="Reconnect", command=self.reconnect)
-        self.quit_button.grid(row=3, column=3)
+        self.reconnect_button = tk.Button(root, text="Reconnect", command=self.reconnect)
+        self.reconnect_button.grid(row=5, column=3)
 
         # Output area
         self.output = tk.Label(root, text="")
-        self.output.grid(row=4, column=0, columnspan=3)
+        self.output.grid(row=6, column=0, columnspan=4)
 
         self.update_inputs()  # Initialize input fields
 
@@ -70,15 +76,31 @@ class MessageApp:
         """ Update input fields based on selected message type """
         msg_type = self.msg_type.get()
 
-        if msg_type in ["FLY_UP", "TRANSLATE"]:
+        if msg_type == "FLY_UP":
             self.input1.grid()
             self.input2.grid_remove()
+            self.input3.grid_remove()
+            self.input4.grid_remove()
+        elif msg_type == "TRANSLATE":
+            self.input1.grid()
+            self.input2.grid()
+            self.input3.grid()
+            self.input4.grid()
         elif msg_type == "LAND_AT":
             self.input1.grid()
             self.input2.grid()
+            self.input3.grid()
+            self.input4.grid()
         elif msg_type in ["LAND", "QUIT"]:
             self.input1.grid_remove()
             self.input2.grid_remove()
+            self.input3.grid_remove()
+            self.input4.grid_remove()
+        elif msg_type == "CUSTOM":
+            self.input1.grid()
+            self.input2.grid()
+            self.input3.grid()
+            self.input4.grid()
 
     def create_message(self):
         """ Create the message and send it """
@@ -88,16 +110,27 @@ class MessageApp:
                 value = int(self.input1.get())
                 message_instance = Message.fly_up(value)
             elif msg_type == "TRANSLATE":
-                value = int(self.input1.get())
-                message_instance = Message.translate(value, value)
+                value1 = int(self.input1.get())
+                value2 = int(self.input2.get())
+                value3 = int(self.input3.get())
+                value4 = int(self.input4.get())
+                message_instance = Message.translate(value1, value2, value3, value4)
             elif msg_type == "LAND_AT":
-                x = int(self.input1.get())
-                y = int(self.input2.get())
-                message_instance = Message.land_at(x, y)
+                value1 = int(self.input1.get())
+                value2 = int(self.input2.get())
+                value3 = int(self.input3.get())
+                value4 = int(self.input4.get())
+                message_instance = Message.land_at(value1, value2, value3, value4)
             elif msg_type == "LAND":
                 message_instance = Message.land()
             elif msg_type == "QUIT":
                 message_instance = Message.quit()
+            elif msg_type == "CUSTOM":
+                value1 = int(self.input1.get())
+                value2 = int(self.input2.get())
+                value3 = int(self.input3.get())
+                value4 = int(self.input4.get())
+                message_instance = Message.custom(value1, value2, value3, value4)
             else:
                 raise ValueError("Invalid message type")
 
@@ -228,4 +261,3 @@ root.mainloop()
 #chiusura connessioni
 BROADCAST.close()
 CLIENT.close()
-

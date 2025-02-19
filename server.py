@@ -13,10 +13,10 @@ INACTIVITY_TIMEOUT = 60  # timeout di inattività del ricevitore
 drone = System()
 
 
-# ------------ INSERISCI QUI TUTTI I TUOI INTRIGHI MATHIAS ----------------
 
 
-async def main():
+#NON HO IDEA SE FUNZIONI O NO PERCHè NON HO IL DRONE
+async def start():
     # Connessione al drone tramite MAVSDK
     await drone.connect(system_address="udpin://127.0.0.1:14550") # qui devi mettere l'indirizzo della scheda di volo
     print("In attesa del drone...")
@@ -30,27 +30,70 @@ async def main():
 
 
 
-
-
-
-def handle_msg(msg: Message):
+async def handle_msg(msg: Message):
     print(f"Handling message: {msg}")
     match msg.command:
+
         case Command.FLY_UP:
-            drone.action.set_takeoff_altitude(msg.values)
-            drone.action.takeoff()
             print(f"Fly Up: {msg.values}")
+            drone.action.set_takeoff_altitude(msg.values) #imposta l'altituinw relativa a quella corrente a cui cerca di arrivare iniziato il takeoff
+            drone.action.takeoff()
+
         case Command.TRANSLATE:
             print(f"Translate: {msg.values}") #da ripensare, opzioni: 1) goto_location ()coordinate globali | 2)impostare una certa velocità nelle 3 dimensioni, mantenendola per x secondi
+           
+            try:
+
+                #offset rispetto alla posizione corrente, tutte in metri
+                dx = msg.values[0]  # Offset in avanti/indietro (NED: North)
+                dy = msg.values[1]  # Offset laterale (NED: East)
+                dz = msg.values[2]  # Offset in altezza (NED: Down)
+                yaw = msg.values[3]  # Yaw (rotazione)
+
+                # Avvia il controllo offboard
+                await drone.offboard.set_position_ned(PositionNedYaw(dx, dy, dz, yaw))
+                await drone.offboard.start()
+                await asyncio.sleep(5)  # dopo 5 secondi si ferma
+                await drone.offboard.stop()
+
+            except OffboardError as e:
+                print(f"Errore nella traslazione: {e}")
+
         case Command.LAND_AT:
             print(f"Land At: {msg.values}")
+
+            #fa la stessa cosa di translate 
+            try:
+
+                #offset rispetto alla posizione corrente, tutte in metri
+                dx = msg.values[0]  # Offset in avanti/indietro (NED: North)
+                dy = msg.values[1]  # Offset laterale (NED: East)
+                dz = msg.values[2]  # Offset in altezza (NED: Down)
+                yaw = msg.values[3]  # Yaw (rotazione)
+
+                # Avvia il controllo offboard
+                await drone.offboard.set_position_ned(PositionNedYaw(dx, dy, dz, yaw))
+                await drone.offboard.start()
+                await asyncio.sleep(5)  # dopo 5 secondi si ferma
+                await drone.offboard.stop()
+
+            except OffboardError as e:
+                print(f"Errore nella traslazione: {e}")
+
+            
+            #una volta traslato, atterra
+            drone.action.land()
+
+
         case Command.LAND:
             print("Land")
             drone.action.land()
+
         case Command.QUIT:
             # qui lasciami il return false che serve per poter uscire dal ciclo di ascolto
             print("Quit command received. Shutting down.")
             return False
+
         case _:
             print(f"Unknown command: {msg.command}")
     
@@ -68,6 +111,7 @@ def parse_message(data):
         
         command_enum = Command(command)
         
+
         match command_enum:
             case Command.FLY_UP:
                 return Message.fly_up(*values)
@@ -90,69 +134,80 @@ def parse_message(data):
     return None
 
 
+async def main():
 
-# broadcast udp lato server
-with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as broadcast_server:
-    broadcast_server.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    broadcast_server.bind(('', 5000))
 
-    print(f"Waiting for client broadcast...")
+    #DA SCOMMENTARE QUANDO SI USA IL VERO DRONE
+    # avvio del drone
+    #await start()
 
-    while True:
-        message, addr = broadcast_server.recvfrom(1024)
-        if message.decode() == "DISCOVERY":
-            print(f"Discovery request received from: {addr}")
-            HOST = addr[0]
-            server_ip = socket.gethostbyname(socket.gethostname())
-            broadcast_server.sendto(f"SERVER_IP:{server_ip}".encode(), addr)
-            break
+    # broadcast udp lato server
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as broadcast_server:
+        broadcast_server.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        broadcast_server.bind(('', 5000))
 
-print(f"Server started and listening on {HOST}:{PORT}")
+        print(f"Waiting for client broadcast...")
 
-#conenssione tcp per lo scalbio messaggi
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
-    server.bind((HOST, PORT))
-    server.listen()
-    print("Server started. Waiting for connections...")
-    server.settimeout(NO_CONNECTION_TIMEOUT)
+        while True:
+            message, addr = broadcast_server.recvfrom(1024)
+            if message.decode() == "DISCOVERY":
+                print(f"Discovery request received from: {addr}")
+                HOST = addr[0]
+                server_ip = socket.gethostbyname(socket.gethostname())
+                broadcast_server.sendto(f"SERVER_IP:{server_ip}".encode(), addr)
+                break
 
-    while True:
-        try:
-            conn, addr = server.accept()
-            print(f"Connection from {addr}")
-            # timeout da modificare a inizio file 
-            conn.settimeout(INACTIVITY_TIMEOUT)
+    print(f"Server started and listening on {HOST}:{PORT}")
 
-            with conn:
-                while True:
-                    try:
-                        data_json = conn.recv(1024) # potrebbe andare in time out
+    # connessione tcp per lo scambio messaggi
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.bind((HOST, PORT))
+        server.listen()
+        print("Server started. Waiting for connections...")
+        server.settimeout(NO_CONNECTION_TIMEOUT)
 
-                        if not data_json:
-                            print("No data received. Closing connection.")
-                            break
+        while True:
+            try:
+                conn, addr = server.accept()
+                print(f"Connection from {addr}")
+                # timeout da modificare a inizio file 
+                conn.settimeout(INACTIVITY_TIMEOUT)
 
-                        data_str = data_json.decode('utf-8')
-                        print(f"Received data: {data_str}")
+                with conn:
+                    while True:
+                        try:
+                            data_json = conn.recv(1024) # potrebbe andare in time out
 
-                        msg = parse_message(data_str)
-
-                        if msg:
-                            # chiamata all'handler
-                            should_continue = handle_msg(msg)
-                            if not should_continue:
-                                print("Quitting connection still listening")
-                                conn.send(f"QUIT".encode())
+                            if not data_json:
+                                print("No data received. Closing connection.")
                                 break
+
+                            data_str = data_json.decode('utf-8')
+                            print(f"Received data: {data_str}")
+
+                            msg = parse_message(data_str)
+
+                            if msg:
+                                # chiamata all'handler
+                                print(f"msg: {msg}")
+
+                                should_continue = await handle_msg(msg)
+                                if not should_continue:
+                                    print("Quitting connection still listening")
+                                    conn.send(f"QUIT".encode())
+                                    break
+                                else:
+                                    # Ack al client se servisse (utile solo a noi per vedere che i messaggi ritornano)
+                                    conn.send(f"ACK".encode())
                             else:
-                                # Ack al client se servisse (utile solo a noi per vedere che i messaggi ritornano)
-                                conn.send(f"ACK".encode())
-                        else:
-                            print("Failed to parse message. Ignoring.")
-                    except socket.timeout:
-                        print("Inactivity timeout reached. Closing connection.")
-                        conn.close()
-                        break
-        except socket.timeout:
-            print("No new connection requests. shutting down")
-            break
+                                print("Failed to parse message. Ignoring.")
+                        except socket.timeout:
+                            print("Inactivity timeout reached. Closing connection.")
+                            conn.close()
+                            break
+            except socket.timeout:
+                print("No new connection requests. shutting down")
+                break
+
+# Esegui il server
+asyncio.run(main())
