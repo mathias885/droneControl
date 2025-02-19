@@ -12,10 +12,6 @@ NO_CONNECTION_TIMEOUT = 30 # timeout di mancanza connesione
 INACTIVITY_TIMEOUT = 60  # timeout di inattività del ricevitore
 drone = System()
 
-
-
-
-#NON HO IDEA SE FUNZIONI O NO PERCHè NON HO IL DRONE
 async def start():
     # Connessione al drone tramite MAVSDK
     await drone.connect(system_address="udpin://127.0.0.1:14550") # qui devi mettere l'indirizzo della scheda di volo
@@ -27,24 +23,17 @@ async def start():
 
     return None
 
-
-
-
 async def handle_msg(msg: Message):
     print(f"Handling message: {msg}")
     match msg.command:
-
         case Command.FLY_UP:
             print(f"Fly Up: {msg.values}")
-            drone.action.set_takeoff_altitude(msg.values) #imposta l'altituinw relativa a quella corrente a cui cerca di arrivare iniziato il takeoff
-            drone.action.takeoff()
+            await drone.action.set_takeoff_altitude(msg.values[0]) #imposta l'altitudine relativa a quella corrente a cui cerca di arrivare iniziato il takeoff
+            await drone.action.takeoff()
 
         case Command.TRANSLATE:
             print(f"Translate: {msg.values}") #da ripensare, opzioni: 1) goto_location ()coordinate globali | 2)impostare una certa velocità nelle 3 dimensioni, mantenendola per x secondi
-           
             try:
-
-                #offset rispetto alla posizione corrente, tutte in metri
                 dx = msg.values[0]  # Offset in avanti/indietro (NED: North)
                 dy = msg.values[1]  # Offset laterale (NED: East)
                 dz = msg.values[2]  # Offset in altezza (NED: Down)
@@ -61,11 +50,7 @@ async def handle_msg(msg: Message):
 
         case Command.LAND_AT:
             print(f"Land At: {msg.values}")
-
-            #fa la stessa cosa di translate 
             try:
-
-                #offset rispetto alla posizione corrente, tutte in metri
                 dx = msg.values[0]  # Offset in avanti/indietro (NED: North)
                 dy = msg.values[1]  # Offset laterale (NED: East)
                 dz = msg.values[2]  # Offset in altezza (NED: Down)
@@ -80,14 +65,12 @@ async def handle_msg(msg: Message):
             except OffboardError as e:
                 print(f"Errore nella traslazione: {e}")
 
-            
             #una volta traslato, atterra
-            drone.action.land()
-
+            await drone.action.land()
 
         case Command.LAND:
             print("Land")
-            drone.action.land()
+            await drone.action.land()
 
         case Command.QUIT:
             # qui lasciami il return false che serve per poter uscire dal ciclo di ascolto
@@ -99,9 +82,6 @@ async def handle_msg(msg: Message):
     
     return True
 
-
-# this function basically returns the corresponding message given by the JSON
-
 def parse_message(data):
     try:
         parsed = json.loads(data)
@@ -111,7 +91,6 @@ def parse_message(data):
         
         command_enum = Command(command)
         
-
         match command_enum:
             case Command.FLY_UP:
                 return Message.fly_up(*values)
@@ -133,13 +112,9 @@ def parse_message(data):
     
     return None
 
-
 async def main():
-
-
-    #DA SCOMMENTARE QUANDO SI USA IL VERO DRONE
     # avvio del drone
-    #await start()
+    await start()
 
     # broadcast udp lato server
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as broadcast_server:
